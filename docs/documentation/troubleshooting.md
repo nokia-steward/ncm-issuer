@@ -62,7 +62,8 @@ it means the controller could reach the Kubernetes apiserver but the
 authenticated `GET /v1/cas` probe against the configured `mainAPI` (and
 `backupAPI` if set) did not return `2xx`. Typical causes:
 
-- wrong `mainAPI` / `backupAPI` URL or unreachable NCM host
+- wrong `mainAPI` / `backupAPI` URL or unreachable NCM host. If NCM serves its REST API under a
+  base path such as `/rest`, the URL must include it
 - invalid or missing credentials in the auth `secret`
 - TLS misconfiguration (missing CA bundle when the NCM uses HTTPS)
 - egress/proxy not configured (see the next section)
