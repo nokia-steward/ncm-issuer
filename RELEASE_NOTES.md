@@ -1,5 +1,13 @@
 # Release Notes
 
+## Version 1.3.1 (Chart: 1.3.1, Image: 1.3.1) - TBD
+
+ncm-issuer 1.3.1 fixes enrollment against an NCM that serves its REST API under a base path such as `/rest`.
+
+### Bug fixes and improvements
+
+- **`provisioner.mainAPI` and `provisioner.backupAPI` may now include the NCM REST base path**, for example `http://ncm.example:8084/rest`. ncm-issuer used to drop the `mainAPI` path when it listed CAs and sent CSRs, so it called `/v1/cas` and `/v1/requests` and NCM answered 404 while the issuer still reported `Ready=True`. With a path in `backupAPI`, requests that follow NCM hrefs (CSR status, certificate download, renewal and the CA chain) went to `/rest/rest/v1/...`. The base path is now added to `/v1/cas` and `/v1/requests` only. Href paths are sent as NCM returned them. A reverse proxy added to map `/v1/` to the base path is no longer needed
+
 ## Version 1.3.0 (Chart: 1.3.0, Image: 1.3.0) - 22 Oct 2026
 
 ncm-issuer 1.3.0 moves the project to the `nokia-steward` GitHub organization, fixes Go standard library and `golang.org/x/net` vulnerabilities reachable from the controller and adds support for Kubernetes 1.37.
