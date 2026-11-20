@@ -18,6 +18,7 @@ package ncmapi
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -290,6 +291,26 @@ func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Accept-Language", "en_US")
 }
 
+// apiPathKey is the request context key holding the fixed API path a request was created for.
+type apiPathKey struct{}
+
+// joinBasePath returns a fixed API path such as CAsPath prefixed with the base path of an NCM API URL.
+func joinBasePath(basePath, apiPath string) string {
+	return strings.TrimRight(basePath, "/") + apiPath
+}
+
+// newAPIRequest creates a request for a fixed API path, joined with the base path of the NCM API that serves it.
+func (c *Client) newAPIRequest(method, apiPath string, body io.Reader) (*http.Request, error) {
+	parsedURL, _ := url.Parse(c.mainAPI.url)
+	req, err := c.newRequest(method, joinBasePath(parsedURL.Path, apiPath), body)
+	if err != nil {
+		return nil, err
+	}
+	return req.WithContext(context.WithValue(req.Context(), apiPathKey{}, apiPath)), nil
+}
+
+// newRequest creates a request for a path taken from an NCM href.
+// NCM hrefs already hold the API base path, so the path is sent unchanged.
 func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	parsedURL, _ := url.Parse(c.mainAPI.url)
 	parsedURL.Path = path
@@ -326,6 +347,7 @@ func (c *Client) validateResponse(resp *http.Response) ([]byte, error) {
 	return nil, &apiError
 }
 
+// doRequest sends the request to the main NCM API, or to the backup one when the main API is unhealthy.
 func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 	if c.mainAPI.isHealthy() {
 		resp, err := c.client.Do(req)
@@ -339,8 +361,8 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 		parsedURL, _ := url.Parse(c.backupAPI.url)
 		req.URL.Scheme = parsedURL.Scheme
 		req.URL.Host = parsedURL.Host
-		if parsedURL.Path != "" {
-			req.URL.Path = parsedURL.Path + req.URL.Path
+		if apiPath, ok := req.Context().Value(apiPathKey{}).(string); ok {
+			req.URL.Path = joinBasePath(parsedURL.Path, apiPath)
 		}
 
 		resp, err := c.client.Do(req)
@@ -421,7 +443,7 @@ func (c *Client) isAPIHealthy(apiURL string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	parsedURL.Path = strings.TrimRight(parsedURL.Path, "/") + CAsPath
+	parsedURL.Path = joinBasePath(parsedURL.Path, CAsPath)
 	req, err := http.NewRequest(http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		return false, err
@@ -445,13 +467,17 @@ func (c *Client) StopHealthChecker() {
 	close(c.stopChecking)
 }
 
-// doGetJSON performs an authenticated GET against the given NCM API path and decodes the JSON body into T.
+// doGetJSON performs an authenticated GET against a path taken from an NCM href and decodes the JSON body into T.
 func doGetJSON[T any](c *Client, path string) (*T, error) {
 	req, err := c.newRequest(http.MethodGet, path, strings.NewReader(""))
 	if err != nil {
 		return nil, err
 	}
+	return doJSON[T](c, req)
+}
 
+// doJSON sends the request and decodes the JSON body of the response into T.
+func doJSON[T any](c *Client, req *http.Request) (*T, error) {
 	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, err
@@ -469,8 +495,13 @@ func doGetJSON[T any](c *Client, path string) (*T, error) {
 	return result, nil
 }
 
+// GetCAs lists the CAs known to NCM.
 func (c *Client) GetCAs() (*CAsResponse, error) {
-	return doGetJSON[CAsResponse](c, CAsPath)
+	req, err := c.newAPIRequest(http.MethodGet, CAsPath, strings.NewReader(""))
+	if err != nil {
+		return nil, err
+	}
+	return doJSON[CAsResponse](c, req)
 }
 
 func (c *Client) GetCA(path string) (*CAResponse, error) {
@@ -516,7 +547,7 @@ func (c *Client) SendCSR(pem []byte, ca *CAResponse, duration *metav1.Duration, 
 		return nil, &ClientError{Reason: "cannot close writer", ErrorMessage: err}
 	}
 
-	req, err := c.newRequest(http.MethodPost, CSRPath, body)
+	req, err := c.newAPIRequest(http.MethodPost, CSRPath, body)
 	if err != nil {
 		return nil, err
 	}
