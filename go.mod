@@ -1,6 +1,6 @@
 module github.com/nokia-steward/ncm-issuer
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/cert-manager/cert-manager v1.21.2
