@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/ncm-issuer-logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -265,7 +265,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../release-notes/1.3.0/" class="md-tabs__link">
+        <a href="../../release-notes/1.3.1/" class="md-tabs__link">
           
   
   
@@ -1083,6 +1083,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../release-notes/1.3.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1.3.1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../release-notes/1.3.0/" class="md-nav__link">
         
   
@@ -1722,8 +1750,9 @@ and certificates are kept.</p>
 <li>The NCM health check now sends <code>GET /v1/cas</code> and counts only <code>2xx</code> responses as healthy. The
   issuer's <code>Ready</code> condition depends on it. A wrong URL or wrong credentials that earlier versions
   reported as <code>Ready=True</code> now give <code>Ready=False</code>.</li>
-<li>Remove any path after the host and port from <code>mainAPI</code>. Requests to the main API ignore it, but the
-  health check calls <code>&lt;mainAPI&gt;/v1/cas</code> and fails if NCM does not answer there.</li>
+<li>Remove any path from <code>mainAPI</code> that NCM does not serve. The health check calls <code>&lt;mainAPI&gt;/v1/cas</code>
+  and fails if NCM does not answer there. Versions before 1.3.1 also ignore the path when they list
+  CAs and send CSRs (see the 1.3.1 note).</li>
 <li>The default images moved from <code>docker.io/misiektoja</code> to <code>ghcr.io/nokia</code>.</li>
 <li>Kubernetes 1.26 or later is required. Helm refuses to install or upgrade the chart on older clusters.</li>
 </ul>
@@ -1747,6 +1776,15 @@ and certificates are kept.</p>
   Change any <code>image.repository</code> or <code>sidecar.repository</code> override that points to <code>ghcr.io/nokia</code> or
   <code>docker.io/misiektoja</code> to <code>ghcr.io/nokia-steward/ncm-issuer</code> and <code>ghcr.io/nokia-steward/ncm-issuer-utils</code>.
   Update registry mirrors that copy from the old locations as well.</li>
+</ul>
+<p><strong>1.3.1</strong></p>
+<ul>
+<li><code>mainAPI</code> and <code>backupAPI</code> may include the NCM REST base path, for example
+  <code>http://ncm.example:8084/rest</code>. Earlier versions dropped the <code>mainAPI</code> path when they listed CAs
+  and sent CSRs, so enrollment failed with 404 while the issuer reported <code>Ready=True</code>. A reverse
+  proxy added to map <code>/v1/</code> to the base path is no longer needed.</li>
+<li>A path in <code>backupAPI</code> is no longer added to paths taken from NCM hrefs, which already contain the
+  base path. Earlier versions sent them to the backup API as <code>/rest/rest/v1/...</code>.</li>
 </ul>
 
 
@@ -1848,7 +1886,7 @@ and certificates are kept.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>
