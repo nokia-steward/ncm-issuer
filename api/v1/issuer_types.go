@@ -132,11 +132,13 @@ type IssuerList struct {
 const IssuerKind = "Issuer"
 
 type NCMProvisioner struct {
-	// MainAPI is the URL to the main NCM API.
+	// MainAPI is the URL to the main NCM API. It may include the NCM REST
+	// base path, for example http://ncm.example:8084/rest.
 	MainAPI string `json:"mainAPI"`
 
 	// BackupAPI is the URL to the backup NCM API in case of
-	// the lack of connection to the main one.
+	// the lack of connection to the main one. It may include
+	// the NCM REST base path.
 	// +optional
 	BackupAPI string `json:"backupAPI,omitempty"`
 
