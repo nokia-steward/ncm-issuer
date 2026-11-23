@@ -1110,10 +1110,11 @@ func TestGetCA(t *testing.T) {
 	}
 }
 
-// requestRecorder collects the method and path of every request a test server receives.
+// requestRecorder collects the method, path and Host header of every request a test server receives.
 type requestRecorder struct {
 	mu       sync.Mutex
 	requests []string
+	hosts    []string
 }
 
 // handler records each request and answers it with the given status and an empty JSON object.
@@ -1121,6 +1122,7 @@ func (r *requestRecorder) handler(statusCode int) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		r.requests = append(r.requests, req.Method+" "+req.URL.Path)
+		r.hosts = append(r.hosts, req.Host)
 		r.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
@@ -1133,6 +1135,7 @@ func (r *requestRecorder) reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.requests = nil
+	r.hosts = nil
 }
 
 // recorded returns a copy of the requests recorded so far.
@@ -1140,6 +1143,52 @@ func (r *requestRecorder) recorded() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.requests...)
+}
+
+// recordedHosts returns a copy of the Host headers recorded so far.
+func (r *requestRecorder) recordedHosts() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.hosts...)
+}
+
+// TestBackupRequestHostHeader checks that requests sent to the backup NCM API carry its host.
+func TestBackupRequestHostHeader(t *testing.T) {
+	mainServer := httptest.NewServer((&requestRecorder{}).handler(http.StatusInternalServerError))
+	defer mainServer.Close()
+
+	backupRecorder := &requestRecorder{}
+	backupServer := httptest.NewServer(backupRecorder.handler(http.StatusOK))
+	defer backupServer.Close()
+
+	config := &cfg.NCMConfig{
+		MainAPI:               mainServer.URL,
+		BackupAPI:             backupServer.URL,
+		Username:              "ncm-user",
+		Password:              "ncm-user-password",
+		HTTPClientTimeout:     10 * time.Second,
+		HealthCheckerInterval: time.Minute,
+	}
+
+	c, _ := NewClient(config, testr.New(t))
+	defer c.StopHealthChecker()
+	if err := c.CheckHealth(); err != nil {
+		t.Fatalf("expected a healthy backup NCM API; got %s", err.Error())
+	}
+	backupRecorder.reset()
+
+	if _, err := c.GetCAs(); err != nil {
+		t.Errorf("GetCAs returned %s", err.Error())
+	}
+	if _, err := c.GetCA("/v1/cas/Mn012Se"); err != nil {
+		t.Errorf("GetCA returned %s", err.Error())
+	}
+
+	backupHost := strings.TrimPrefix(backupServer.URL, "http://")
+	expected := []string{backupHost, backupHost}
+	if diff := cmp.Diff(expected, backupRecorder.recordedHosts()); diff != "" {
+		t.Errorf("received and wanted Host headers are not the same (-want +got)\n%s", diff)
+	}
 }
 
 // TestRequestPathsWithAPIBasePath checks the paths NCM receives when mainAPI or backupAPI carries a base path.
