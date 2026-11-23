@@ -73,7 +73,7 @@ Third-party actions must be pinned to a full commit SHA with the version in a tr
 * the limited suite on every pull request,
 * the full suite on `main` and on demand.
 
-Neither needs credentials, so both run on pull requests from forks. [`.github/TESTING.md`](.github/TESTING.md) documents the suites and the compatibility matrix.
+Both run against a live NCM and read its address and credentials from repository secrets. Pull requests from forks and from Dependabot get no secrets, so the limited suite builds the image there and skips the test. [`.github/TESTING.md`](.github/TESTING.md) documents the suites and the compatibility matrix.
 
 ## Dependency and image scanning
 

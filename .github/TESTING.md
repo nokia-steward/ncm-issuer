@@ -27,6 +27,10 @@ The workflows separate two independent concerns:
 | Pull request, push to `main` or a `release-*` branch, and weekly | `security.yml` | reachable Go vulnerabilities, container image scan |
 | Push to `main`, a branch protection change, and weekly | `scorecard.yml` | OpenSSF Scorecard supply chain rating |
 
+The e2e tests run against a live NCM and read its address and credentials from repository
+secrets. Runs started by Dependabot or from a fork get no secrets, so `clientauth-test.yml`
+reports a notice and skips its test there. On `main` a missing `CLIENTAUTH_NCM_HOST` fails the run.
+
 ## Compatibility matrix
 
 We do not test the full cartesian product of versions. Each cert-manager release supports

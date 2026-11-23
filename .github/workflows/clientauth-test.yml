@@ -27,8 +27,32 @@ permissions:
   contents: read
 
 jobs:
+  # Runs started by Dependabot or from a fork get no repository secrets, so the test cannot reach NCM.
+  check-secrets:
+    name: "check NCM secrets"
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+    - name: "check NCM secrets"
+      id: check
+      env:
+        CLIENTAUTH_NCM_HOST: ${{ secrets.CLIENTAUTH_NCM_HOST }}
+      run: |
+        if [ -n "$CLIENTAUTH_NCM_HOST" ]; then
+          echo "available=true" >> "$GITHUB_OUTPUT"
+        elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
+          echo "::error::CLIENTAUTH_NCM_HOST is not set, so the client authentication test cannot run on main"
+          exit 1
+        else
+          echo "::notice::NCM secrets are not available to this run, so the client authentication test is skipped"
+          echo "available=false" >> "$GITHUB_OUTPUT"
+        fi
+
   client-auth-test:
     name: "tls with client auth"
+    needs: check-secrets
+    if: needs.check-secrets.outputs.available == 'true'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
