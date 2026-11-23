@@ -361,6 +361,8 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 		parsedURL, _ := url.Parse(c.backupAPI.url)
 		req.URL.Scheme = parsedURL.Scheme
 		req.URL.Host = parsedURL.Host
+		// net/http sends req.Host as the Host header, and newRequest set it to the main API host.
+		req.Host = ""
 		if apiPath, ok := req.Context().Value(apiPathKey{}).(string); ok {
 			req.URL.Path = joinBasePath(parsedURL.Path, apiPath)
 		}
