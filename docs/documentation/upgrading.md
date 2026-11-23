@@ -108,8 +108,9 @@ Check every entry for the versions you upgrade across.
 * The NCM health check now sends `GET /v1/cas` and counts only `2xx` responses as healthy. The
   issuer's `Ready` condition depends on it. A wrong URL or wrong credentials that earlier versions
   reported as `Ready=True` now give `Ready=False`.
-* Remove any path after the host and port from `mainAPI`. Requests to the main API ignore it, but the
-  health check calls `<mainAPI>/v1/cas` and fails if NCM does not answer there.
+* Remove any path from `mainAPI` that NCM does not serve. The health check calls `<mainAPI>/v1/cas`
+  and fails if NCM does not answer there. Versions before 1.3.1 also ignore the path when they list
+  CAs and send CSRs (see the 1.3.1 note).
 * The default images moved from `docker.io/misiektoja` to `ghcr.io/nokia`.
 * Kubernetes 1.26 or later is required. Helm refuses to install or upgrade the chart on older clusters.
 
@@ -133,3 +134,12 @@ Check every entry for the versions you upgrade across.
   Change any `image.repository` or `sidecar.repository` override that points to `ghcr.io/nokia` or
   `docker.io/misiektoja` to `ghcr.io/nokia-steward/ncm-issuer` and `ghcr.io/nokia-steward/ncm-issuer-utils`.
   Update registry mirrors that copy from the old locations as well.
+
+**1.3.1**
+
+* `mainAPI` and `backupAPI` may include the NCM REST base path, for example
+  `http://ncm.example:8084/rest`. Earlier versions dropped the `mainAPI` path when they listed CAs
+  and sent CSRs, so enrollment failed with 404 while the issuer reported `Ready=True`. A reverse
+  proxy added to map `/v1/` to the base path is no longer needed.
+* A path in `backupAPI` is no longer added to paths taken from NCM hrefs, which already contain the
+  base path. Earlier versions sent them to the backup API as `/rest/rest/v1/...`.
