@@ -27,6 +27,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1098,6 +1099,167 @@ func TestGetCA(t *testing.T) {
 				}),
 			err:        errors.New("cannot unmarshal json"),
 			expectedCA: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
+
+// requestRecorder collects the method and path of every request a test server receives.
+type requestRecorder struct {
+	mu       sync.Mutex
+	requests []string
+}
+
+// handler records each request and answers it with the given status and an empty JSON object.
+func (r *requestRecorder) handler(statusCode int) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		r.mu.Lock()
+		r.requests = append(r.requests, req.Method+" "+req.URL.Path)
+		r.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		w.Write([]byte("{}"))
+	}
+}
+
+// reset drops the requests recorded so far.
+func (r *requestRecorder) reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = nil
+}
+
+// recorded returns a copy of the requests recorded so far.
+func (r *requestRecorder) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.requests...)
+}
+
+// TestRequestPathsWithAPIBasePath checks the paths NCM receives when mainAPI or backupAPI carries a base path.
+func TestRequestPathsWithAPIBasePath(t *testing.T) {
+	// hrefPath stands for a path taken from an href that NCM returned, which already holds the base path.
+	const hrefPath = "/rest/v1/cas/Mn012Se"
+
+	type testCase struct {
+		name             string
+		mainBasePath     string
+		backupBasePath   string
+		mainIsDown       bool
+		expectedBasePath string
+	}
+
+	run := func(t *testing.T, tc testCase) {
+		mainRecorder := &requestRecorder{}
+		mainStatus := http.StatusOK
+		if tc.mainIsDown {
+			mainStatus = http.StatusInternalServerError
+		}
+		mainServer := httptest.NewServer(mainRecorder.handler(mainStatus))
+		defer mainServer.Close()
+
+		backupRecorder := &requestRecorder{}
+		backupServer := httptest.NewServer(backupRecorder.handler(http.StatusOK))
+		defer backupServer.Close()
+
+		config := &cfg.NCMConfig{
+			MainAPI:               mainServer.URL + tc.mainBasePath,
+			BackupAPI:             backupServer.URL + tc.backupBasePath,
+			Username:              "ncm-user",
+			Password:              "ncm-user-password",
+			HTTPClientTimeout:     10 * time.Second,
+			HealthCheckerInterval: time.Minute,
+		}
+
+		c, _ := NewClient(config, testr.New(t))
+		defer c.StopHealthChecker()
+		if err := c.CheckHealth(); err != nil {
+			t.Fatalf("%s failed; expected a healthy NCM API; got %s", tc.name, err.Error())
+		}
+		mainRecorder.reset()
+		backupRecorder.reset()
+
+		if _, err := c.GetCAs(); err != nil {
+			t.Errorf("%s failed; GetCAs returned %s", tc.name, err.Error())
+		}
+		if _, err := c.SendCSR([]byte("csr"), &crt1, nil, ""); err != nil {
+			t.Errorf("%s failed; SendCSR returned %s", tc.name, err.Error())
+		}
+		if _, err := c.GetCA(hrefPath); err != nil {
+			t.Errorf("%s failed; GetCA returned %s", tc.name, err.Error())
+		}
+		if _, err := c.DownloadCertificateInPEM(hrefPath); err != nil {
+			t.Errorf("%s failed; DownloadCertificateInPEM returned %s", tc.name, err.Error())
+		}
+		if _, err := c.RenewCertificate(hrefPath, nil, ""); err != nil {
+			t.Errorf("%s failed; RenewCertificate returned %s", tc.name, err.Error())
+		}
+
+		expected := []string{
+			"GET " + tc.expectedBasePath + CAsPath,
+			"POST " + tc.expectedBasePath + CSRPath,
+			"GET " + hrefPath,
+			"GET " + hrefPath,
+			"POST " + hrefPath + "/update",
+		}
+		serving, idle := mainRecorder, backupRecorder
+		if tc.mainIsDown {
+			serving, idle = backupRecorder, mainRecorder
+		}
+		if diff := cmp.Diff(expected, serving.recorded()); diff != "" {
+			t.Errorf("%s failed; received and wanted requests are not the same (-want +got)\n%s", tc.name, diff)
+		}
+		if got := idle.recorded(); len(got) != 0 {
+			t.Errorf("%s failed; expected no requests to the other NCM API; got %v", tc.name, got)
+		}
+	}
+
+	testCases := []testCase{
+		{
+			name:             "main-api-without-base-path",
+			expectedBasePath: "",
+		},
+		{
+			name:             "main-api-with-base-path",
+			mainBasePath:     "/rest",
+			expectedBasePath: "/rest",
+		},
+		{
+			name:             "main-api-with-trailing-slash",
+			mainBasePath:     "/rest/",
+			expectedBasePath: "/rest",
+		},
+		{
+			name:             "backup-api-with-base-path",
+			mainBasePath:     "/rest",
+			backupBasePath:   "/rest",
+			mainIsDown:       true,
+			expectedBasePath: "/rest",
+		},
+		{
+			name:             "backup-api-with-trailing-slash",
+			mainBasePath:     "/rest",
+			backupBasePath:   "/rest/",
+			mainIsDown:       true,
+			expectedBasePath: "/rest",
+		},
+		{
+			name:             "backup-api-base-path-differs-from-main",
+			backupBasePath:   "/rest",
+			mainIsDown:       true,
+			expectedBasePath: "/rest",
+		},
+		{
+			name:             "backup-api-without-base-path",
+			mainBasePath:     "/rest",
+			mainIsDown:       true,
+			expectedBasePath: "",
 		},
 	}
 
