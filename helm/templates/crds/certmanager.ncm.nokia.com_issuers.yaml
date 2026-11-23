@@ -118,7 +118,8 @@ spec:
                     type: object
                   backupAPI:
                     description: BackupAPI is the URL to the backup NCM API in case
-                      of the lack of connection to the main one.
+                      of the lack of connection to the main one. It may include the
+                      NCM REST base path.
                     type: string
                   healthCheckerInterval:
                     default: 1m
@@ -141,7 +142,8 @@ spec:
                       CA bundle when provided or the system trust store.
                     type: boolean
                   mainAPI:
-                    description: MainAPI is the URL to the main NCM API.
+                    description: MainAPI is the URL to the main NCM API. It may include
+                      the NCM REST base path, for example http://ncm.example:8084/rest.
                     type: string
                   tlsRef:
                     description: TLSRef is a reference to a Secret containing the CA
